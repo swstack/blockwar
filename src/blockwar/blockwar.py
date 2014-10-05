@@ -1,9 +1,12 @@
 import random
+import logging
 
 import pygame
 from pygame.locals import QUIT, KEYUP, MOUSEBUTTONUP, K_LEFT, K_ESCAPE, K_RIGHT, K_w, \
     K_a, K_UP, K_d, K_DOWN, K_s
 from constants import *
+
+logger = logging.getLogger('blockwar')
 
 
 # Global state
@@ -18,20 +21,28 @@ SOLVE_SURF = None
 SOLVE_RECT = None
 
 
+class BlockWarException(Exception):
+    """Base class for all exceptions raised from blockwar"""
+
+
+class QuitEvent(BlockWarException):
+    """Someone has requested to quit the game"""
+
+
 class BlockWar(object):
     def __init__(self):
         pass
 
-    # ------------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------------
     # Private
-    # ------------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------------
     def _check_for_quit(self):
-        for event in pygame.event.get(QUIT):  # get all the QUIT events
-            self.terminate()  # terminate if any QUIT events are present
+        if pygame.event.get(QUIT):
+            raise QuitEvent()
 
         for event in pygame.event.get(KEYUP):  # get all the KEYUP events
             if event.key == K_ESCAPE:
-                self.terminate()  # terminate if the KEYUP event was for the Esc key
+                raise QuitEvent()
             pygame.event.post(event)  # put the other KEYUP event objects back
 
     def _get_starting_board(self):
@@ -194,12 +205,12 @@ class BlockWar(object):
             pygame.display.update()
             FPSCLOCK.tick(FPS)
 
-    def _reset_animation(self, board, allMoves):
-        # make all of the moves in allMoves in reverse.
-        revAllMoves = allMoves[:]  # gets a copy of the list
-        revAllMoves.reverse()
+    def _reset_animation(self, board, all_moves):
+        # make all of the moves in all_moves in reverse.
+        revall_moves = all_moves[:]  # gets a copy of the list
+        revall_moves.reverse()
 
-        for move in revAllMoves:
+        for move in revall_moves:
             if move == UP:
                 oppositeMove = DOWN
             elif move == DOWN:
@@ -230,10 +241,74 @@ class BlockWar(object):
             lastMove = move
         return board, sequence
 
+    def _tick(self, main_board, solution_seq, SOLVEDBOARD, all_moves):
+        slide_to = None  # the direction, if any, a tile should slide
+        msg = 'Click tile or press arrow keys to slide.'  # contains the message to show in the upper left corner.
+        if main_board == SOLVEDBOARD:
+            msg = 'Solved!'
+
+        self._draw_board(main_board, msg)
+
+        self._check_for_quit()
+        for event in pygame.event.get():  # event handling loop
+            if event.type == MOUSEBUTTONUP:
+                spotx, spoty = self._get_spot_clicked(main_board, event.pos[0],
+                                                      event.pos[1])
+
+                if (spotx, spoty) == (None, None):
+                    # check if the user clicked on an option button
+                    if RESET_RECT.collidepoint(event.pos):
+                        self._reset_animation(main_board,
+                                              all_moves)  # clicked on Reset button
+                        all_moves = []
+                    elif NEW_RECT.collidepoint(event.pos):
+                        main_board, solution_seq = self._generate_new_puzzle(
+                            80)  # clicked on New Game button
+                        all_moves = []
+                    elif SOLVE_RECT.collidepoint(event.pos):
+                        self._reset_animation(main_board,
+                                              solution_seq + all_moves)  # clicked on Solve button
+                        all_moves = []
+                else:
+                    # check if the clicked tile was next to the blank spot
+
+                    blankx, blanky = self._get_blank_position(main_board)
+                    if spotx == blankx + 1 and spoty == blanky:
+                        slide_to = LEFT
+                    elif spotx == blankx - 1 and spoty == blanky:
+                        slide_to = RIGHT
+                    elif spotx == blankx and spoty == blanky + 1:
+                        slide_to = UP
+                    elif spotx == blankx and spoty == blanky - 1:
+                        slide_to = DOWN
+
+            elif event.type == KEYUP:
+                # check if the user pressed a key to slide a tile
+                if event.key in (K_LEFT, K_a) and self._is_valid_move(main_board,
+                                                                      LEFT):
+                    slide_to = LEFT
+                elif event.key in (K_RIGHT, K_d) and self._is_valid_move(main_board,
+                                                                         RIGHT):
+                    slide_to = RIGHT
+                elif event.key in (K_UP, K_w) and self._is_valid_move(main_board, UP):
+                    slide_to = UP
+                elif event.key in (K_DOWN, K_s) and self._is_valid_move(main_board,
+                                                                        DOWN):
+                    slide_to = DOWN
+
+        if slide_to:
+            self._slide_animation(main_board, slide_to,
+                                  'Click tile or press arrow keys to slide.',
+                                  8)  # show slide on screen
+            self._make_move(main_board, slide_to)
+            all_moves.append(slide_to)  # record the slide
+        pygame.display.update()
+        FPSCLOCK.tick(FPS)
+
     #------------------------------------------------------------------------------------
     # Public
     #------------------------------------------------------------------------------------
-    def run(self):
+    def setup(self):
         global FPSCLOCK, DISPLAYSURF, BASICFONT, RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT
 
         pygame.init()
@@ -254,73 +329,15 @@ class BlockWar(object):
                                                  WINDOWWIDTH - 120,
                                                  WINDOWHEIGHT - 30)
 
-        mainBoard, solutionSeq = self._generate_new_puzzle(80)
+    def run(self):
+        logger.critical('Starting BlockWar...')
+        main_board, solution_seq = self._generate_new_puzzle(80)
         SOLVEDBOARD = self._get_starting_board()  # a solved board is the same as the board in a start state.
-        allMoves = []  # list of moves made from the solved configuration
-
+        all_moves = []  # list of moves made from the solved configuration
         while True:  # main game loop
-            slideTo = None  # the direction, if any, a tile should slide
-            msg = 'Click tile or press arrow keys to slide.'  # contains the message to show in the upper left corner.
-            if mainBoard == SOLVEDBOARD:
-                msg = 'Solved!'
-
-            self._draw_board(mainBoard, msg)
-
-            self._check_for_quit()
-            for event in pygame.event.get():  # event handling loop
-                if event.type == MOUSEBUTTONUP:
-                    spotx, spoty = self._get_spot_clicked(mainBoard, event.pos[0],
-                                                          event.pos[1])
-
-                    if (spotx, spoty) == (None, None):
-                        # check if the user clicked on an option button
-                        if RESET_RECT.collidepoint(event.pos):
-                            self._reset_animation(mainBoard,
-                                                  allMoves)  # clicked on Reset button
-                            allMoves = []
-                        elif NEW_RECT.collidepoint(event.pos):
-                            mainBoard, solutionSeq = self._generate_new_puzzle(
-                                80)  # clicked on New Game button
-                            allMoves = []
-                        elif SOLVE_RECT.collidepoint(event.pos):
-                            self._reset_animation(mainBoard,
-                                                  solutionSeq + allMoves)  # clicked on Solve button
-                            allMoves = []
-                    else:
-                        # check if the clicked tile was next to the blank spot
-
-                        blankx, blanky = self._get_blank_position(mainBoard)
-                        if spotx == blankx + 1 and spoty == blanky:
-                            slideTo = LEFT
-                        elif spotx == blankx - 1 and spoty == blanky:
-                            slideTo = RIGHT
-                        elif spotx == blankx and spoty == blanky + 1:
-                            slideTo = UP
-                        elif spotx == blankx and spoty == blanky - 1:
-                            slideTo = DOWN
-
-                elif event.type == KEYUP:
-                    # check if the user pressed a key to slide a tile
-                    if event.key in (K_LEFT, K_a) and self._is_valid_move(mainBoard,
-                                                                          LEFT):
-                        slideTo = LEFT
-                    elif event.key in (K_RIGHT, K_d) and self._is_valid_move(mainBoard,
-                                                                             RIGHT):
-                        slideTo = RIGHT
-                    elif event.key in (K_UP, K_w) and self._is_valid_move(mainBoard, UP):
-                        slideTo = UP
-                    elif event.key in (K_DOWN, K_s) and self._is_valid_move(mainBoard,
-                                                                            DOWN):
-                        slideTo = DOWN
-
-            if slideTo:
-                self._slide_animation(mainBoard, slideTo,
-                                      'Click tile or press arrow keys to slide.',
-                                      8)  # show slide on screen
-                self._make_move(mainBoard, slideTo)
-                allMoves.append(slideTo)  # record the slide
-            pygame.display.update()
-            FPSCLOCK.tick(FPS)
+            self._tick(main_board, solution_seq, SOLVEDBOARD, all_moves)
 
     def quit(self):
+        """Quit Block War, must be called outside of the main execution loop"""
+        logger.critical('Quitting BlockWar, until next time...')
         pygame.quit()

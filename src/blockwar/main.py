@@ -1,13 +1,14 @@
-from blockwar import BlockWar
-from util.log import LoggingConfigurator
+from blockwar import BlockWar, QuitEvent
+from util import log, paths
 
 # Configure logging
-LoggingConfigurator()
+log.configure(file_path=paths.env(), file_name='log.txt')
 
 # Run Block War
 block_war = BlockWar()
+block_war.setup()
 
 try:
     block_war.run()
-except KeyboardInterrupt:
+except(KeyboardInterrupt, QuitEvent), ex:
     block_war.quit()
