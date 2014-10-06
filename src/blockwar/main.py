@@ -6,7 +6,7 @@ log.configure(file_path=paths.env(), file_name='log.txt')
 
 # Run Block War
 block_war = BlockWar()
-block_war.setup()
+block_war.initialize()
 
 try:
     block_war.run()
