@@ -27,6 +27,10 @@ def env():
         return os.path.join(project_root(), ".env")
 
 
+def resources():
+    return os.path.abspath(os.path.join(THIS_DIR, '..', 'resources'))
+
+
 def log_file():
     return os.path.join(env(), 'log.txt')
 

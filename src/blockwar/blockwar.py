@@ -1,9 +1,11 @@
-import random
 import logging
+import os
+import time
 
 import pygame
 from pygame.locals import QUIT, KEYUP, MOUSEBUTTONUP, K_LEFT, K_ESCAPE, K_RIGHT, K_w, \
     K_a, K_UP, K_d, K_DOWN, K_s
+from util import paths
 
 
 logger = logging.getLogger('blockwar')
@@ -65,15 +67,15 @@ class BlockWar(object):
         entrance.fill(COLOR_TURF)
         self._display_surface.blit(entrance, (175, 0))
 
+        hero = pygame.image.load(os.path.join(paths.resources(), 'img', 'hero-sm.png'))
+        self._display_surface.blit(hero, (182, 2))
+
         self._update_display()
 
     def run(self):
         logger.critical('Starting BlockWar...')
-        main_board, solution_seq = self._generate_new_puzzle(80)
-        self._solved_board = self._get_starting_board()  # a solved board is the same as the board in a start state.
-        all_moves = []  # list of moves made from the solved configuration
         while True:  # main game loop
-            self._tick(main_board, solution_seq, all_moves)
+            time.sleep(1)
 
     def quit(self):
         """Quit Block War, must be called outside of the main execution loop"""
